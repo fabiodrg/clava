@@ -20,18 +20,16 @@ OpsBlock.prototype.add = function (primitiveType, bitWidth, opType) {
 }
 
 /**
- * @private
- * 
- * Reduces this block operations and all nested blocks into a single one,
+ * Reduces this block of operations and all nested blocks into a single one,
  * considering the number of repetitions of each block.
  * 
  * E.g.
  * ```
  * {
- * 	iops-32-add: 5,
- * 	iops-32-mul: 3 ,
- * 	flops-64-mul: 2048,
- * 	flops-64-add: 2048
+ * 	"iops-32-add": 5,
+ * 	"iops-32-mul": 3 ,
+ * 	"flops-64-mul": 2048,
+ * 	"flops-64-add": 2048
  * }
  * ```
  * 
@@ -76,9 +74,68 @@ OpsBlock.prototype.__reduce = function () {
 	return acc;
 }
 
+/**
+ * Reduces the operations grouping them by their primitive type and bitwidth
+ * 
+ * E.g.
+ * ```
+ * {
+ * 	"iops-32": 8,
+ * 	"flops-64": 4096,
+ * }
+ * ```
+ * 
+ * @param {Object} acc The accumulator object, and final return value
+ * @param {Number} numOps The number of counted operations for the tuple
+ * (primitiveType, opName, bitWidth)
+ * @param {"iops"|"flops"} primitiveType The primitive type of the operation,
+ * i.e. integer or floating-point
+ * @param {String} opName The operator name, e.g. `add`, `assing`, etc. See
+ * {@link StaticOpsCounter._validOps}
+ * @param {8|16|32|64} bitWidth The operation data type size in bits
+ */
+OpsBlock.__defaultReduce = function (acc, numOps, primitiveType, opName, bitWidth) {
+	var key = primitiveType + '-' + bitWidth;
+	if (acc[key] === undefined) {
+		acc[key] = 0;
+	}
 
-}
+	acc[key] += numOps;
+};
 
-OpsBlock.prototype.add = function (opsId) {
-	this.cost.increment(opsId);
+/**
+ * 
+ * @param {Object} [acc={}] The accumulator object, controlled by the
+ * user-defined reducer
+ * @param {Function} [reducer=OpsBlock.__defaultReduce] The user-defined
+ * reducer function. See {@link OpsBlock.__defaultReduce} for expected function
+ * signature
+ * 
+ * @returns {Object} The reduced operations block object
+ */
+OpsBlock.prototype.reduce = function (acc, reducer) {
+	// if no user-defined reducer, fallback to a default
+	if (reducer === undefined) {
+		reducer = OpsBlock.__defaultReduce;
+		acc = {};
+	}
+
+	// perform normal reduce
+	var __acc = this.__reduce();
+
+	// aggregate the data as defined by the user's reducer
+	for (var key in __acc) {
+		// extract the primitive data type, bitwidth and operator name
+		var objKey = OpsCost.splitKey(key);
+		// invoke users reduce operation
+		reducer(
+			acc,
+			__acc[key],
+			objKey.primitiveType,
+			objKey.opName,
+			objKey.bitWidth
+		);
+	}
+
+	return acc;
 }
