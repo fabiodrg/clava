@@ -205,6 +205,11 @@ StaticOpsCounter.prototype._getCounterType = function ($builtinType) {
 }
 
 StaticOpsCounter.prototype._toBuiltinType = function ($type) {
+	// try to desugar this type until a builtin type is found
+	if ($type.hasSugar) {
+		$type = $type.desugarAll;
+	}
+
 	if ($type.instanceOf("builtinType")) {
 		return $type;
 	}
