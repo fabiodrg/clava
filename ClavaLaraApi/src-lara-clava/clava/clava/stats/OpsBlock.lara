@@ -3,7 +3,7 @@ import clava.stats.OpsCost;
 /**
  * @class
  */
-var OpsBlock = function(id) {
+var OpsBlock = function (id) {
 	this.id = id;
 	this.cost = new OpsCost();
 	this.nestedOpsBlocks = [];
@@ -11,8 +11,8 @@ var OpsBlock = function(id) {
 	//this.isRecursive = false;
 };
 
-OpsBlock.prototype.toString = function() {
-	return object2stringSimple(this);	
+OpsBlock.prototype.toString = function () {
+	return object2stringSimple(this);
 	/*
 	//return object2string(this, '', true);
 	var obj = {};
@@ -26,6 +26,6 @@ OpsBlock.prototype.toString = function() {
 	*/
 }
 
-OpsBlock.prototype.add = function(opsId) {
+OpsBlock.prototype.add = function (opsId) {
 	this.cost.increment(opsId);
 }
