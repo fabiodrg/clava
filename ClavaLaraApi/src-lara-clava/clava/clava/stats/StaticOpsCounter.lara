@@ -11,6 +11,7 @@ import lara.code.Logger;
 import lara.Strings;
 
 /**
+ * @class
  * Instruments an application so that it counts total operations in a region of code.
  *
  * @param {function} [filterFunction=undefined] - Function that receives an $op. If returns false, $op will not be counted.
@@ -20,7 +21,9 @@ var StaticOpsCounter = function (filterFunction) {
 	this._filterFunction = filterFunction;
 };
 
-// Whitelist of ops
+/**
+ * The valid operators names in Clava
+ */
 StaticOpsCounter._validOps = new StringSet(
 	"mul",
 	"div",
@@ -137,16 +140,13 @@ StaticOpsCounter.prototype._countOpStatic = function ($stmt, opsBlock) {
 			continue;
 		}
 
-		//println("Op ("+$op.kind+"): " + $op.code);
-
 		// Calculate type and bitwidth
 		var $builtinType = this._toBuiltinType($op.type);
 		var counterType = this._getCounterType($builtinType);
 		var bitwidth = $builtinType !== undefined ? $builtinType.bitWidth($op) : undefined;
 
 		// Increment counter
-		var opsId = counterType + "-" + bitwidth;
-		opsBlock.add(opsId);
+		opsBlock.add(counterType, bitwidth, $op.kind);
 	}
 
 	// Call function recursively when function calls are found

@@ -1,26 +1,61 @@
 /**
  * @class
+ * Counts the number of operations according to their data type and bitwidth
  */
-var OpsCost = function() {
+var OpsCost = function () {
+	/**
+	 * @type {Object.<String, Number>}
+	 */
 	this.ops = {};
 };
 
-OpsCost.prototype.toString = function() {
-	return object2stringSimple(this);	
-	/*
-	var obj = {};
-
-	obj["ops"] = this.ops;
-
-	return object2string(obj);
-	*/	
+/**
+ * Build the identifier used internally
+ * 
+ * @param {"iops"|"flops"} primitiveType The operation type, either integer or
+ * floating point
+ * @param {8|16|32|64} bitWidth The operation data size in bits
+ * @param {String} opName The operator name (e.g. `add`, `assing`). See
+ * {@link StaticOpsCounter._validOps}
+ * @returns {String}
+ */
+OpsCost.buildKey = function (primitiveType, bitWidth, opName) {
+	return [primitiveType, bitWidth, opName].join('-');
 }
 
-OpsCost.prototype.increment = function(opsId) {
-	var currentValue = this.ops[opsId];
-	if(currentValue === undefined) {
-		this.ops[opsId] = 1;
+/**
+ * Breaks a key into the three components: data type, bit width, operator name
+ * 
+ * @param {String} key 
+ * @returns {{primitiveType:String, opName:String, bitWidth:Number}}
+ */
+OpsCost.splitKey = function (key) {
+	var a = key.split('-');
+	return {
+		primitiveType: a[0],
+		bitWidth: a[1],
+		opName: a[2],
+	};
+}
+
+/**
+ * Increments the ocurrance of a certain operation
+ * 
+ * @param {"iops"|"flops"} primitiveType The operation type, either integer or
+ * floating point
+ * @param {8|16|32|64} bitWidth The operation data size in bits
+ * @param {String} opName The operator name (e.g. `add`, `assing`). See
+ * {@link StaticOpsCounter._validOps}
+ */
+OpsCost.prototype.increment = function (primitiveType, bitWidth, opName) {
+	var key = OpsCost.buildKey(primitiveType, bitWidth, opName);
+	if (this.ops[key] === undefined) {
+		this.ops[key] = 1;
 	} else {
-		this.ops[opsId] = currentValue + 1;
+		this.ops[key]++;
 	}
+}
+
+OpsCost.prototype.toString = function () {
+	return object2stringSimple(this);
 }
