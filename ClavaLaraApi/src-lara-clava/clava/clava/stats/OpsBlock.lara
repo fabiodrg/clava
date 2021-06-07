@@ -19,6 +19,64 @@ OpsBlock.prototype.add = function (primitiveType, bitWidth, opType) {
 	this.cost.increment(primitiveType, bitWidth, opType);
 }
 
+/**
+ * @private
+ * 
+ * Reduces this block operations and all nested blocks into a single one,
+ * considering the number of repetitions of each block.
+ * 
+ * E.g.
+ * ```
+ * {
+ * 	iops-32-add: 5,
+ * 	iops-32-mul: 3 ,
+ * 	flops-64-mul: 2048,
+ * 	flops-64-add: 2048
+ * }
+ * ```
+ * 
+ * @returns {Object.<String,Number>} A plain object with the number of
+ * operations per operation type (grouped by primitive type, bitwidth and
+ * operator name, see {@link OpsCost.buildKey}).
+ */
+OpsBlock.prototype.__reduce = function () {
+	if (this.cost.ops === undefined || this.cost.ops === null)
+		return acc;
+
+	/**
+	 * 
+	 * @param {Object} acc 
+	 * @param {Object.<String, Number>} opsCost 
+	 * @param {Number} reps
+	 */
+	var genericReduce = (acc, opsCost, reps) => {
+		// for each key
+		for (var key in opsCost) {
+			// make any initialization if needed
+			if (acc[key] === undefined)
+				acc[key] = 0;
+
+			// operations occur `reps` times
+			acc[key] += opsCost[key] * reps;
+		}
+	};
+
+	// init
+	var acc = {};
+
+	// reduce this block operations
+	genericReduce(acc, this.cost.ops, this.repetitions);
+
+	// reduce all nested blocks
+	for (var nestedBlock of this.nestedOpsBlocks) {
+		var nestedAcc = nestedBlock.__reduce();
+		genericReduce(acc, nestedAcc, this.repetitions);
+	}
+
+	return acc;
+}
+
+
 }
 
 OpsBlock.prototype.add = function (opsId) {
