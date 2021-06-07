@@ -16,62 +16,40 @@ import lara.Strings;
  * @param {function} [filterFunction=undefined] - Function that receives an $op. If returns false, $op will not be counted.
  */
 var StaticOpsCounter = function (filterFunction) {
-	this._counters = {}; // TODO: To remove
-	this._$counterType = ClavaJoinPoints.builtinType("long long"); // TODO: To remove
-	//this._$counterType = ClavaJoinPoints.builtinType("unsigned long long");
 	this._instrumentedFunctions = new StringSet();
 	this._filterFunction = filterFunction;
-	if (filterFunction !== undefined) {
-		println("StaticOpsCounter: filter function set");
-	}
 };
 
 // Whitelist of ops
-StaticOpsCounter._validOps = new StringSet("mul", "div", "rem", "add", "sub", "shl", "shr", "cmp", "and", "xor", "or", "l_and", "l_or", "mul_assign", "div_assign", "rem_assign", "add_assign", "sub_assign", "shl_assign", "shr_assign", "and_assign", "xor_assign", "or_assign", "post_inc", "post_dec", "pre_inc", "pre_dec");
-
-
-/*
-StaticOpsCounter.prototype.count = function($region) {
-
-	var $scope = $region.instanceOf('scope') ?  $region : $region.ancestor('scope');
-
-	if($scope === undefined) {
-		PrintOnce.message("StaticOpsCounter.instrument: Could not find scope corresponding to the region " + $region.location);
-		return;
-	}
-
-
-	return this.countStmts($scope.stmts);
-}
-*/
-
-/*
-StaticOpsCounter.prototype.countStmts = function(stmtsArray) {
-
-
-
-	// Check if it is already instrumented
-	if(this._instrumentedFunctions.has($function.jpId)) {
-		return;
-	}
-
-	this._instrumentedFunctions.add($function.jpId);
-	
-	println("StaticOpsCounter.instrument: Estimating ops of function "+$function.jpId);
-
-	var opsBlock = new OpsBlock($function.jpId);
-
-	// Go statement-by-statement
-
-	// Apply to all ops found in the region
-	for(var $op of Query.searchFrom($region, 'op')) {
-		this._countOpStatic($op);
-	}
-
-	return opsBlock;
-}
-*/
-
+StaticOpsCounter._validOps = new StringSet(
+	"mul",
+	"div",
+	"rem",
+	"add",
+	"sub",
+	"shl",
+	"shr",
+	"cmp",
+	"and",
+	"xor",
+	"or",
+	"l_and",
+	"l_or",
+	"mul_assign",
+	"div_assign",
+	"rem_assign",
+	"add_assign",
+	"sub_assign",
+	"shl_assign",
+	"shr_assign",
+	"and_assign",
+	"xor_assign",
+	"or_assign",
+	"post_inc",
+	"post_dec",
+	"pre_inc",
+	"pre_dec"
+);
 
 StaticOpsCounter.prototype.count = function ($function, opsBlock) {
 
@@ -184,9 +162,6 @@ StaticOpsCounter.prototype._countOpStatic = function ($stmt, opsBlock) {
 
 
 }
-
-
-
 
 StaticOpsCounter.prototype._getCounterType = function ($builtinType) {
 
