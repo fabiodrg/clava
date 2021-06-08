@@ -148,8 +148,17 @@ StaticOpsCounter.prototype.__count$function = function ($function, opsBlock) {
 		throw new Error("Expected $function joinpoint, got :" + $function);
 	}
 
-	// Create block for function
-	var functionBlock = new OpsBlock(this.__getOpsBlockId($function));
+	// Build function ID
+	var functionId = this.__getOpsBlockId($function);
+
+	// Create block for function or use a cached version
+	var functionBlock;
+	if (functionId in this.instrumentedFunctions) {
+		functionBlock = this.instrumentedFunctions[functionId];
+	} else {
+		functionBlock = new OpsBlock(functionId);
+		this.instrumentedFunctions[functionId] = functionBlock;
+	}
 
 	// Push it to nested blocks
 	if (opsBlock !== undefined) {
