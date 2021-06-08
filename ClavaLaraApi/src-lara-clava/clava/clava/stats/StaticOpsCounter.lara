@@ -61,69 +61,27 @@ StaticOpsCounter._validOps = new StringSet(
 	"pre_dec"
 );
 
-StaticOpsCounter.prototype.count = function ($function, opsBlock) {
-
-	var $function = $function.instanceOf('function') ? $function : $function.ancestor('function');
-
-	if ($function === undefined) {
-		PrintOnce.message("StaticOpsCounter.count: Could not find function corresponding to the join point " + $function.location);
-		return;
+StaticOpsCounter.prototype.count = function ($jp, opsBlock) {
+	if ($jp.joinPointType === "function") {
+		// process this function jp
+		return this.__count$function($jp, opsBlock);
+	} else if ($jp.joinPointType === "loop") {
+		// process this loop jp
+		return this.__count$loop($jp, opsBlock);
+	} else if ($jp.instanceOf("statement")) {
+		// if there's no block yet, create a new empty one
+		if (opsBlock === undefined) {
+			opsBlock = new OpsBlock('stmt');
+		}
+		return this.__count$stmt($jp, opsBlock);
+	} else {
+		println("Unknown " + $jp);
 	}
-
-	// build the ID for this function
-	var functionId = $function.name + "@" + $function.location;
-
-	// if this function has been processed, return the cached result
-	if (functionId in this.instrumentedFunctions) {
-		return this.instrumentedFunctions[functionId];
-	}
-
-	// init new block for this function
-	var opsBlock = new OpsBlock(functionId);
-
-	// Go statement-by-statement
-	var stmts = $function.body.children;
-	for (var $stmt of stmts) {
-		this._countOpStatic($stmt, opsBlock);
-	}
-
-	// store the result
-	this.instrumentedFunctions[functionId] = opsBlock;
-
-	return opsBlock;
 }
 
-
-StaticOpsCounter.prototype._countOpStatic = function ($stmt, opsBlock) {
-
-	// If stmt is a loop, count new block, recursively
-
-	if ($stmt.instanceOf("loop")) {
-		if ($stmt.kind !== "for") {
-			println("Ignoring loops that are not 'fors' (location " + $stmt.location + ") for now");
-			return;
-		}
-
-		var rank = $stmt.rank;
-		var nestedId = opsBlock.id + " => " + rank[rank.length - 1];
-
-		// Create block for loop
-		var nestedOpsBlock = new OpsBlock(nestedId);
-
-		// Extract iterations
-		nestedOpsBlock.repetitions = $stmt.iterationsExpr.code;
-
-		// Add to nested blocks
-		opsBlock.nestedOpsBlocks.push(nestedOpsBlock);
-
-		// Go statement-by-statement
-		var nestedStmts = $stmt.body.children;
-
-		for (var $stmt of nestedStmts) {
-			this._countOpStatic($stmt, nestedOpsBlock);
-		}
-
-		return;
+StaticOpsCounter.prototype.__count$stmt = function ($stmt, opsBlock) {
+	if (!$stmt.instanceOf("statement")) {
+		throw new Error("Expected $statement joinpoint, got :" + $stmt);
 	}
 
 	// If stmt is not a loop, count ops
@@ -151,12 +109,59 @@ StaticOpsCounter.prototype._countOpStatic = function ($stmt, opsBlock) {
 			continue;
 		}
 		// count operations for this function
-		var funcBlock = this.count($funcDef, opsBlock);
-		// add the function operations block to this nested blocks
-		opsBlock.nestedOpsBlocks.push(funcBlock);
+		this.count($funcDef, opsBlock);
 	}
 
+	return opsBlock;
+}
 
+StaticOpsCounter.prototype.__count$loop = function ($loop, opsBlock) {
+	if (!$loop.instanceOf("loop"))
+		throw new Error("Expected $loop joinpoint, got :" + $loop);
+
+	if ($loop.kind !== "for") {
+		println("Ignoring loops that are not 'fors' (location " + $loop.location + ") for now");
+		return;
+	}
+
+	// Create block for loop
+	var loopBlock = new OpsBlock('loop');
+
+	// Push it to nested blocks
+	if (opsBlock !== undefined) {
+		opsBlock.nestedOpsBlocks.push(loopBlock);
+	}
+
+	// Extract iterations
+	loopBlock.repetitions = $loop.iterationsExpr.code;
+
+	// Go statement-by-statement
+	for (var $stmt of $loop.body.children) {
+		this.count($stmt, loopBlock);
+	}
+
+	return loopBlock;
+}
+
+StaticOpsCounter.prototype.__count$function = function ($function, opsBlock) {
+	if (!$function.instanceOf("function")) {
+		throw new Error("Expected $function joinpoint, got :" + $function);
+	}
+
+	// Create block for function
+	var functionBlock = new OpsBlock('function');
+
+	// Push it to nested blocks
+	if (opsBlock !== undefined) {
+		opsBlock.nestedOpsBlocks.push(functionBlock);
+	}
+
+	// Go statement-by-statement
+	for (var $stmt of $function.body.children) {
+		this.count($stmt, functionBlock);
+	}
+
+	return functionBlock;
 }
 
 StaticOpsCounter.prototype._getCounterType = function ($builtinType) {
