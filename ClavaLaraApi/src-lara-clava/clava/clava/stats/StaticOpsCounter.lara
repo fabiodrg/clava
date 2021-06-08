@@ -68,48 +68,56 @@ StaticOpsCounter.prototype.count = function ($jp, opsBlock) {
 	} else if ($jp.joinPointType === "loop") {
 		// process this loop jp
 		return this.__count$loop($jp, opsBlock);
-	} else if ($jp.instanceOf("statement")) {
+	} else if ($jp.instanceOf("expression")) {
 		// if there's no block yet, create a new empty one
 		if (opsBlock === undefined) {
 			opsBlock = new OpsBlock(this.__getOpsBlockId($jp));
 		}
-		return this.__count$stmt($jp, opsBlock);
+		return this.__count$expr($jp, opsBlock);
 	} else {
-		println("Unknown " + $jp);
+		// unknown type, create a block if needed and traverse the children nodes
+
+		if (opsBlock === undefined) {
+			opsBlock = new OpsBlock(this.__getOpsBlockId($jp));
+		}
+		for (var $child of $jp.children) {
+			this.count($child, opsBlock);
+		}
+		return opsBlock;
 	}
 }
 
-StaticOpsCounter.prototype.__count$stmt = function ($stmt, opsBlock) {
-	if (!$stmt.instanceOf("statement")) {
-		throw new Error("Expected $statement joinpoint, got :" + $stmt);
+StaticOpsCounter.prototype.__count$expr = function ($expr, opsBlock) {
+	if (!$expr.instanceOf("expression")) {
+		throw new Error("Expected $expression joinpoint, got :" + $expr);
 	}
 
-	// If stmt is not a loop, count ops
-	// Apply to all ops found in the stmt
-	for (var $op of Query.searchFrom($stmt, 'op')) {
+	// process this expression type
+	if ($expr.instanceOf("op")) {
+		var $op = $expr;
 
-		// If not a valid op, continue
-		if (!this._isValidOp($op)) {
-			continue;
+		// cound if valid
+		if (this._isValidOp($op)) {
+			// Calculate type and bitwidth
+			var $builtinType = this._toBuiltinType($op.type);
+			var counterType = this._getCounterType($builtinType);
+			var bitwidth = $builtinType !== undefined ? $builtinType.bitWidth($op) : undefined;
+
+			// Increment counter
+			opsBlock.add(counterType, bitwidth, $op.kind);
 		}
 
-		// Calculate type and bitwidth
-		var $builtinType = this._toBuiltinType($op.type);
-		var counterType = this._getCounterType($builtinType);
-		var bitwidth = $builtinType !== undefined ? $builtinType.bitWidth($op) : undefined;
-
-		// Increment counter
-		opsBlock.add(counterType, bitwidth, $op.kind);
+	} else if ($expr.instanceOf("call")) {
+		var $funcDef = $expr.definition;
+		// count function operations if defined
+		if ($funcDef !== undefined) {
+			this.count($funcDef, opsBlock);
+		}
 	}
 
-	// Call function recursively when function calls are found
-	for (var $call of Query.searchFrom($stmt, 'call')) {
-		var $funcDef = $call.definition;
-		if ($funcDef === undefined) {
-			continue;
-		}
-		// count operations for this function
-		this.count($funcDef, opsBlock);
+	// traverse children nodes
+	for (var $child of $expr.children) {
+		this.count($child, opsBlock);
 	}
 
 	return opsBlock;
@@ -225,17 +233,9 @@ StaticOpsCounter.prototype._isValidOp = function ($op) {
 		return false;
 	}
 
-	// Ignore operations inside loop headers
-	if ($op.isInsideLoopHeader) {
-		return false;
-	}
-
-	//println("FILTER FUNCTION DEFINED? " + (this._filterFunction !== undefined));
 	if (this._filterFunction !== undefined) {
-		//println("Calling filter function");
-		if (!this._filterFunction($op)) {
-			return false;
-		}
+		// call filter function
+		return this._filterFunction($op);
 	}
 
 	return true;
