@@ -14,10 +14,15 @@ import lara.Strings;
  * @class
  * Counts total operations in a region of code
  *
- * @param {function?} [filterFunction] Function that receives an $op. If returns
+ * @param {function?} filterFunction Function that receives an $op. If returns
  * false, $op will not be counted.
+ * @param {Object} config 
+ * @param {Boolean} [config.inclLoopHeader=false] Include operations in loop
+ * headers
+ * @param {Boolean} [config.inclArraySubscript=true] Include operations in array
+ * subscript expressions
  */
-var StaticOpsCounter = function (filterFunction) {
+var StaticOpsCounter = function (filterFunction, config) {
 	/**
 	 * Stores processed functions (cache)
 	 */
@@ -26,6 +31,11 @@ var StaticOpsCounter = function (filterFunction) {
 	 * User-defined filter
 	 */
 	this._filterFunction = filterFunction;
+	/**
+	 * User settings
+	 */
+	this.inclLoopHeader = (config && config.inclLoopHeader) || false;
+	this.inclArraySubscript = (config && config.inclArraySubscript) || true;
 };
 
 /**
@@ -92,6 +102,11 @@ StaticOpsCounter.prototype.__count$expr = function ($expr, opsBlock) {
 		throw new Error("Expected $expression joinpoint, got :" + $expr);
 	}
 
+	// if array subscript disabled and expression is array access, skip it
+	if (!this.inclArraySubscript && $expr.instanceOf("arrayAccess")) {
+		return OpsBlock;
+	}
+
 	// process this expression type
 	if ($expr.instanceOf("op")) {
 		var $op = $expr;
@@ -143,9 +158,18 @@ StaticOpsCounter.prototype.__count$loop = function ($loop, opsBlock) {
 	// Extract iterations
 	loopBlock.repetitions = $loop.iterationsExpr.code;
 
-	// Go statement-by-statement
-	for (var $stmt of $loop.body.children) {
-		this.count($stmt, loopBlock);
+	// go statement-by-statement
+	// if header is included, traverse all direct children, which includes
+	// init stmt, cond stmt, step stmt and the loop body
+	// otherwise, skip to loop body
+	if (!this.inclLoopHeader) {
+		println("disabled");
+		this.count($loop.body, loopBlock);
+	} else {
+		println("enabled");
+		for (var $stmt of $loop.children) {
+			this.count($stmt, loopBlock);
+		}
 	}
 
 	return loopBlock;
