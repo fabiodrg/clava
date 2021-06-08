@@ -12,12 +12,19 @@ import lara.Strings;
 
 /**
  * @class
- * Instruments an application so that it counts total operations in a region of code.
+ * Counts total operations in a region of code
  *
- * @param {function} [filterFunction=undefined] - Function that receives an $op. If returns false, $op will not be counted.
+ * @param {function?} [filterFunction] Function that receives an $op. If returns
+ * false, $op will not be counted.
  */
 var StaticOpsCounter = function (filterFunction) {
-	this._instrumentedFunctions = new StringSet();
+	/**
+	 * Stores processed functions (cache)
+	 */
+	this.instrumentedFunctions = {};
+	/**
+	 * User-defined filter
+	 */
 	this._filterFunction = filterFunction;
 };
 
@@ -63,37 +70,25 @@ StaticOpsCounter.prototype.count = function ($function, opsBlock) {
 		return;
 	}
 
+	// build the ID for this function
 	var functionId = $function.name + "@" + $function.location;
 
-	// Check if it is already instrumented
-	//println("ID: " + $function.location);
-	if (this._instrumentedFunctions.has(functionId)) {
-		//if(this._instrumentedFunctions.has($function.jpId)) {
-		// Not working yet
-		/*
-		if(opsBlock === undefined) {
-			println("Expected opsBlock to be defined!");
-		} else {
-			opsBlock.isRecursive = true;
-		}
-		*/
-
-		return;
+	// if this function has been processed, return the cached result
+	if (functionId in this.instrumentedFunctions) {
+		return this.instrumentedFunctions[functionId];
 	}
 
-
-	this._instrumentedFunctions.add(functionId);
-
-	println("StaticOpsCounter.count: Estimating ops of function " + functionId);
-
+	// init new block for this function
 	var opsBlock = new OpsBlock(functionId);
 
 	// Go statement-by-statement
 	var stmts = $function.body.children;
-
 	for (var $stmt of stmts) {
 		this._countOpStatic($stmt, opsBlock);
 	}
+
+	// store the result
+	this.instrumentedFunctions[functionId] = opsBlock;
 
 	return opsBlock;
 }
@@ -152,12 +147,13 @@ StaticOpsCounter.prototype._countOpStatic = function ($stmt, opsBlock) {
 	// Call function recursively when function calls are found
 	for (var $call of Query.searchFrom($stmt, 'call')) {
 		var $funcDef = $call.definition;
-
 		if ($funcDef === undefined) {
 			continue;
 		}
-		//println("FUNC DEF: " + $funcDef.joinPointType);
-		this.count($funcDef, opsBlock);
+		// count operations for this function
+		var funcBlock = this.count($funcDef, opsBlock);
+		// add the function operations block to this nested blocks
+		opsBlock.nestedOpsBlocks.push(funcBlock);
 	}
 
 
