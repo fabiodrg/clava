@@ -71,7 +71,7 @@ StaticOpsCounter.prototype.count = function ($jp, opsBlock) {
 	} else if ($jp.instanceOf("statement")) {
 		// if there's no block yet, create a new empty one
 		if (opsBlock === undefined) {
-			opsBlock = new OpsBlock('stmt');
+			opsBlock = new OpsBlock(this.__getOpsBlockId($jp));
 		}
 		return this.__count$stmt($jp, opsBlock);
 	} else {
@@ -125,7 +125,7 @@ StaticOpsCounter.prototype.__count$loop = function ($loop, opsBlock) {
 	}
 
 	// Create block for loop
-	var loopBlock = new OpsBlock('loop');
+	var loopBlock = new OpsBlock(this.__getOpsBlockId($loop));
 
 	// Push it to nested blocks
 	if (opsBlock !== undefined) {
@@ -149,7 +149,7 @@ StaticOpsCounter.prototype.__count$function = function ($function, opsBlock) {
 	}
 
 	// Create block for function
-	var functionBlock = new OpsBlock('function');
+	var functionBlock = new OpsBlock(this.__getOpsBlockId($function));
 
 	// Push it to nested blocks
 	if (opsBlock !== undefined) {
@@ -162,6 +162,20 @@ StaticOpsCounter.prototype.__count$function = function ($function, opsBlock) {
 	}
 
 	return functionBlock;
+}
+
+StaticOpsCounter.prototype.__getOpsBlockId = function ($jp) {
+	if ($jp.instanceOf("function")) {
+		return $jp.name + "@" + $jp.location;
+	} else if ($jp.instanceOf("loop")) {
+		var $parentFunc = $jp.ancestor("function");
+		var str = $parentFunc !== null ? $parentFunc.name + ":" : "";
+		return str + "loop:" + $jp.rank.join('-') + "@" + $jp.location;
+	} else {
+		var $parentFunc = $jp.ancestor("function");
+		var str = $parentFunc !== null ? $parentFunc.name + ":" : "";
+		return str + $jp.joinPointType + "@" + $jp.location;
+	}
 }
 
 StaticOpsCounter.prototype._getCounterType = function ($builtinType) {
