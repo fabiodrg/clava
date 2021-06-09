@@ -38,38 +38,39 @@ var StaticOpsCounter = function (filterFunction, config) {
 	this.inclArraySubscript = (config && config.inclArraySubscript) || true;
 };
 
+StaticOpsCounter.arithmeticOps = new StringSet(
+	"mul", "div", "rem", "add", "sub",
+	"mul_assign", "div_assign", "rem_assign", "add_assign", "sub_assign",
+	"post_inc", "post_dec", "pre_inc", "pre_dec"
+)
+
+StaticOpsCounter.bitwiseOps = new StringSet(
+	"shl", "shr", "and", "xor", "or", "not",
+	"shl_assign", "shr_assign", "and_assign", "xor_assign", "or_assign"
+)
+
+StaticOpsCounter.relationalOps = new StringSet(
+	"cmp", "lt", "gt", "le", "ge", "eq", "ne"
+)
+
+StaticOpsCounter.logicalOps = new StringSet(
+	"l_and", "l_or", "l_not"
+)
+
 /**
  * The valid operators names in Clava
+ * 
+ * Missing operators: ptr_mem_d, ptr_mem_i, assign, comma, addr_of, deref,
+ * plus, minus, real, imag, extension, cowait.
+ * 
+ * @see {pt.up.fe.specs.clava.ast.expr.BinaryOperator}
+ * @see {pt.up.fe.specs.clava.ast.expr.UnaryOperator}
  */
-StaticOpsCounter._validOps = new StringSet(
-	"mul",
-	"div",
-	"rem",
-	"add",
-	"sub",
-	"shl",
-	"shr",
-	"cmp",
-	"and",
-	"xor",
-	"or",
-	"l_and",
-	"l_or",
-	"mul_assign",
-	"div_assign",
-	"rem_assign",
-	"add_assign",
-	"sub_assign",
-	"shl_assign",
-	"shr_assign",
-	"and_assign",
-	"xor_assign",
-	"or_assign",
-	"post_inc",
-	"post_dec",
-	"pre_inc",
-	"pre_dec"
-);
+StaticOpsCounter._validOps = new StringSet()
+	.union(StaticOpsCounter.arithmeticOps)
+	.union(StaticOpsCounter.bitwiseOps)
+	.union(StaticOpsCounter.relationalOps)
+	.union(StaticOpsCounter.logicalOps);
 
 StaticOpsCounter.prototype.count = function ($jp, opsBlock) {
 	if ($jp.joinPointType === "function") {
