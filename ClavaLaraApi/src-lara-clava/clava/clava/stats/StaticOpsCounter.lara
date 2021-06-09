@@ -24,35 +24,59 @@ import lara.Strings;
  */
 var StaticOpsCounter = function (filterFunction, config) {
 	/**
-	 * Stores processed functions (cache)
+	 * Stores processed functions (cache). Maps the identifiers (see 
+	 * {@link StaticOpsCounter#__getOpsBlockId}) to OpsBlocks
+	 * @type {Object.<String, OpsBlock>}
 	 */
 	this.instrumentedFunctions = {};
 	/**
 	 * User-defined filter
+	 * @type {Function?}
 	 */
 	this._filterFunction = filterFunction;
 	/**
-	 * User settings
+	 * If true, counts operations in loop's headers
+	 * @type {Boolean}
 	 */
 	this.inclLoopHeader = (config && config.inclLoopHeader) || false;
+	/**
+	 * If true, counts operations in array subscript expressions
+	 * @type {Boolean}
+	 */
 	this.inclArraySubscript = (config && config.inclArraySubscript) || true;
 };
 
+/**
+ * Name of valid arithmetic operations
+ * @type {StringSet}
+ */
 StaticOpsCounter.arithmeticOps = new StringSet(
 	"mul", "div", "rem", "add", "sub",
 	"mul_assign", "div_assign", "rem_assign", "add_assign", "sub_assign",
 	"post_inc", "post_dec", "pre_inc", "pre_dec"
 )
 
+/**
+ * Name of valid bitwise operations
+ * @type {StringSet}
+ */
 StaticOpsCounter.bitwiseOps = new StringSet(
 	"shl", "shr", "and", "xor", "or", "not",
 	"shl_assign", "shr_assign", "and_assign", "xor_assign", "or_assign"
 )
 
+/**
+ * Name of valid relational operations
+ * @type {StringSet}
+ */
 StaticOpsCounter.relationalOps = new StringSet(
 	"cmp", "lt", "gt", "le", "ge", "eq", "ne"
 )
 
+/**
+ * Name of valid logical operations
+ * @type {StringSet}
+ */
 StaticOpsCounter.logicalOps = new StringSet(
 	"l_and", "l_or", "l_not"
 )
@@ -63,8 +87,9 @@ StaticOpsCounter.logicalOps = new StringSet(
  * Missing operators: ptr_mem_d, ptr_mem_i, assign, comma, addr_of, deref,
  * plus, minus, real, imag, extension, cowait.
  * 
- * @see {pt.up.fe.specs.clava.ast.expr.BinaryOperator}
- * @see {pt.up.fe.specs.clava.ast.expr.UnaryOperator}
+ * @see pt.up.fe.specs.clava.ast.expr.BinaryOperator
+ * @see pt.up.fe.specs.clava.ast.expr.UnaryOperator
+ * @static @member {StringSet}
  */
 StaticOpsCounter._validOps = new StringSet()
 	.union(StaticOpsCounter.arithmeticOps)
@@ -72,6 +97,13 @@ StaticOpsCounter._validOps = new StringSet()
 	.union(StaticOpsCounter.relationalOps)
 	.union(StaticOpsCounter.logicalOps);
 
+/**
+ * Counts the number of operations inside a given block
+ * @param $jp The joinpoint from where operations should be counted. It supports
+ * functions, loops and every other joinpoint that has expressions in children
+ * nodes
+ * @returns {OpsBlock} The parent ops block instance
+ */
 StaticOpsCounter.prototype.count = function ($jp, opsBlock) {
 	if ($jp.joinPointType === "function") {
 		// process this function jp
@@ -98,6 +130,18 @@ StaticOpsCounter.prototype.count = function ($jp, opsBlock) {
 	}
 }
 
+/**
+ * Processes expression type joinpoints
+ * 
+ * It looks for 'op' joinpoints to increment operation ocurrances and calls to
+ * functions to be processed recursively. It skips the expressions inside
+ * array subscripts according to user-setting
+ * {@link StaticOpsCounter~inclArraySubscript}
+ * 
+ * @param $expr 
+ * @param {OpsBlock} opsBlock 
+ * @returns {opsBlock}
+ */
 StaticOpsCounter.prototype.__count$expr = function ($expr, opsBlock) {
 	if (!$expr.instanceOf("expression")) {
 		throw new Error("Expected $expression joinpoint, got :" + $expr);
@@ -117,7 +161,7 @@ StaticOpsCounter.prototype.__count$expr = function ($expr, opsBlock) {
 			// Calculate type and bitwidth
 			var $builtinType = this._toBuiltinType($op.type);
 			var counterType = this._getCounterType($builtinType);
-			var bitwidth = $builtinType !== undefined ? $builtinType.bitWidth($op) : undefined;
+			var bitwidth = $builtinType !== null ? $builtinType.bitWidth($op) : null;
 
 			// Increment counter
 			opsBlock.add(counterType, bitwidth, $op.kind);
@@ -139,6 +183,18 @@ StaticOpsCounter.prototype.__count$expr = function ($expr, opsBlock) {
 	return opsBlock;
 }
 
+/**
+ * Processes loop type joinpoints
+ * 
+ * For each loop, a new block is created. The number of repetitions is
+ * initialized accordingly with the iterations expression of the loop.
+ * Operations in the header are counted accordingly with the user-defined
+ * setting {@link StaticOpsCounter~inclLoopHeader}
+ * 
+ * @param $loop 
+ * @param {OpsBlock} opsBlock 
+ * @returns {OpsBlock}
+ */
 StaticOpsCounter.prototype.__count$loop = function ($loop, opsBlock) {
 	if (!$loop.instanceOf("loop"))
 		throw new Error("Expected $loop joinpoint, got :" + $loop);
@@ -176,6 +232,18 @@ StaticOpsCounter.prototype.__count$loop = function ($loop, opsBlock) {
 	return loopBlock;
 }
 
+/**
+ * Processes function type joinpoints
+ * 
+ * For each function, a new block is created. It checks wether the function
+ * has been processed already, and if so, returns the cached result. Otherwise,
+ * processes all statements/expressions inside the function and caches the
+ * result
+ * 
+ * @param $function 
+ * @param {OpsBlock} opsBlock 
+ * @returns {OpsBlock}
+ */
 StaticOpsCounter.prototype.__count$function = function ($function, opsBlock) {
 	if (!$function.instanceOf("function")) {
 		throw new Error("Expected $function joinpoint, got :" + $function);
@@ -206,24 +274,43 @@ StaticOpsCounter.prototype.__count$function = function ($function, opsBlock) {
 	return functionBlock;
 }
 
+/**
+ * Auxiliar method to compute the identifiers to be used in {@link OpsBlock}
+ * objects
+ * 
+ * @param $jp
+ * @returns {String} The identifier
+ */
 StaticOpsCounter.prototype.__getOpsBlockId = function ($jp) {
 	if ($jp.instanceOf("function")) {
+		// if function => '<func name>@<location>'
 		return $jp.name + "@" + $jp.location;
 	} else if ($jp.instanceOf("loop")) {
+		// if loop, => '<func name>:<loop>:<rank>@<location>'
+		// or if no ancestor function exists, => '<loop>:<rank>@<location>'
 		var $parentFunc = $jp.ancestor("function");
 		var str = $parentFunc !== null ? $parentFunc.name + ":" : "";
 		return str + "loop:" + $jp.rank.join('-') + "@" + $jp.location;
 	} else {
+		// for other joinpoints => '<func name>:<jp type>@<location>' or
+		// '<jp type>@<location>'
 		var $parentFunc = $jp.ancestor("function");
 		var str = $parentFunc !== null ? $parentFunc.name + ":" : "";
 		return str + $jp.joinPointType + "@" + $jp.location;
 	}
 }
 
+/**
+ * 
+ * @param {$builtinType} $builtinType 
+ * @returns {'flops'|'iops'|null} Returns the operator data type. If integer,
+ * returns 'iops', if floating-point 'flops', and in case of error returns
+ * null
+ */
 StaticOpsCounter.prototype._getCounterType = function ($builtinType) {
 
-	if ($builtinType === undefined) {
-		return undefined;
+	if ($builtinType === null) {
+		return null;
 	}
 
 	if ($builtinType.isFloat) {
@@ -232,10 +319,16 @@ StaticOpsCounter.prototype._getCounterType = function ($builtinType) {
 		return "iops";
 	} else {
 		PrintOnce.message("StaticOpsCounter: could not determine if builtinType " + $type.kind + " is integer or float");
-		return undefined;
+		return null;
 	}
 }
 
+/**
+ * Given a $type instance, tries to retrieve a builtin type
+ * 
+ * @param {$type} $type 
+ * @returns {$builtinType|null} The $builtinType if found or null otherwise 
+ */
 StaticOpsCounter.prototype._toBuiltinType = function ($type) {
 	// try to desugar this type until a builtin type is found
 	if ($type.hasSugar) {
@@ -247,10 +340,19 @@ StaticOpsCounter.prototype._toBuiltinType = function ($type) {
 	}
 
 	PrintOnce.message("StaticOpsCounter: could not determine builtinType of " + $type.joinPointType);
-	return undefined;
+	return null;
 }
 
 
+/**
+ * Validates an operator joinpoint. If a user-defined filter is provided
+ * it is used for validation. Otherwise, it just ensures the operator name
+ * is valid internally
+ * 
+ * @param {$op} $op 
+ * @returns {Boolean} True if valid operation and should be counted, false
+ * otherwise
+ */
 StaticOpsCounter.prototype._isValidOp = function ($op) {
 	var isValid = StaticOpsCounter._validOps.has($op.kind);
 
