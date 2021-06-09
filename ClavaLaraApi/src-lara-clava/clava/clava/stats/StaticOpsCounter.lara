@@ -70,7 +70,7 @@ StaticOpsCounter.bitwiseOps = new StringSet(
  * @type {StringSet}
  */
 StaticOpsCounter.relationalOps = new StringSet(
-	"cmp", "lt", "gt", "le", "ge", "eq", "ne"
+	"cmp", "lt", "gt", "le", "ge", "eq", "ne", "ternary"
 )
 
 /**
@@ -89,6 +89,7 @@ StaticOpsCounter.logicalOps = new StringSet(
  * 
  * @see pt.up.fe.specs.clava.ast.expr.BinaryOperator
  * @see pt.up.fe.specs.clava.ast.expr.UnaryOperator
+ * @see pt.up.fe.specs.clava.ast.expr.ConditionalOperator
  * @static @member {StringSet}
  */
 StaticOpsCounter._validOps = new StringSet()
